@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Assistant</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand">
+          <div class="brand-logo">AI</div>
+          <div class="brand-text">
+            <h2>AI Assistant</h2>
+            <p>Multi-Agent SDLC</p>
+          </div>
+        </div>
+
+        <button id="newChatBtn" class="new-chat">
+          <i class="fa-solid fa-plus"></i>
+          <span>New Chat</span>
+        </button>
+      </div>
+
+      <div class="sidebar-section">
+        <span class="section-title">Chats</span>
+        <div id="chatList" class="chat-list"></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left">
+          <div class="online-dot"></div>
+          <span>AI Assistant</span>
+        </div>
+      </header>
+
+      <section id="chatMessages" class="messages"></section>
+
+      <section id="downloadArea" class="download-area"></section>
+
+      <footer class="composer-area">
+        <form id="chatForm" class="composer">
+          <div class="composer-icon" aria-hidden="true">
+            <i class="fa-solid fa-sparkles"></i>
+          </div>
+          <textarea
+            id="messageInput"
+            class="composer-input"
+            rows="1"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Ask the AI anything..."
+          ></textarea>
+          <button type="submit" class="send-btn" aria-label="Send message">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </footer>
+    </main>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
