@@ -9,8 +9,7 @@ from backend.db import init_db
 from backend.routes import router
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = BASE_DIR / "frontend"
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 
 app = FastAPI()
 
@@ -34,9 +33,10 @@ def startup():
     init_db()
 
 
+
 @app.get("/")
 async def home():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
 @app.get("/chat/{conversation_id}")
