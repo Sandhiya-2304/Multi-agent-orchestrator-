@@ -10,26 +10,26 @@
       "use": "@vercel/python"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/main.py"
+      "source": "/api/(.*)",
+      "destination": "/backend/main.py"
     },
     {
-      "src": "/static/(.*)",
-      "dest": "backend/frontend/$1"
+      "source": "/static/(.*)",
+      "destination": "/backend/frontend/$1"
     },
     {
-      "src": "/chat/(.*)",
-      "dest": "backend/frontend/index.html"
+      "source": "/chat/(.*)",
+      "destination": "/backend/frontend/index.html"
     },
     {
-      "src": "/",
-      "dest": "backend/frontend/index.html"
+      "source": "/",
+      "destination": "/backend/frontend/index.html"
     },
     {
-      "src": "/(.*)",
-      "dest": "backend/main.py"
+      "source": "/(.*)",
+      "destination": "/backend/main.py"
     }
   ]
 }
