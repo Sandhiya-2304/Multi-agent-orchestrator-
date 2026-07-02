@@ -1,7 +1,12 @@
 import sqlite3
 from datetime import datetime
 
-DB_PATH = "chat_history.db"
+import os
+
+if os.environ.get("VERCEL"):
+    DB_PATH = "/tmp/chat_history.db"
+else:
+    DB_PATH = "chat_history.db"
 
 
 _db_initialized = False
