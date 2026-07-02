@@ -5,15 +5,11 @@
       "src": "backend/main.py",
       "use": "@vercel/python",
       "config": {
-        "includeFiles": "backend/frontend/**"
+        "includeFiles": "backend/frontend/**",
+        "maxDuration": 60
       }
     }
   ],
-  "functions": {
-    "backend/main.py": {
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     {
       "source": "/(.*)",
