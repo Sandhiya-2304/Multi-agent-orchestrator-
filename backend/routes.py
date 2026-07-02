@@ -25,7 +25,13 @@ from agent_framework import Agent
 
 router = APIRouter()
 
-OUTPUT_DIR = Path("output").resolve()
+import os
+
+if os.environ.get("VERCEL"):
+    OUTPUT_DIR = Path("/tmp/output").resolve()
+else:
+    OUTPUT_DIR = Path("output").resolve()
+    
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Shared Orchestrator Instance

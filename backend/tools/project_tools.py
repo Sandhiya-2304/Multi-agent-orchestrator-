@@ -1,7 +1,10 @@
 import os
 from pathlib import Path
 
-OUTPUT_DIR = Path("output").resolve()
+if os.environ.get("VERCEL"):
+    OUTPUT_DIR = Path("/tmp/output").resolve()
+else:
+    OUTPUT_DIR = Path("output").resolve()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 

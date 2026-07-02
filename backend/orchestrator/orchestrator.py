@@ -21,7 +21,10 @@ from backend.service.service import OpenAIService
 class SDLCOrchestrator:
 
     def __init__(self):
-        self.output_root = Path("output")
+        if os.environ.get("VERCEL"):
+            self.output_root = Path("/tmp/output")
+        else:
+            self.output_root = Path("output")
         self.output_root.mkdir(parents=True, exist_ok=True)
 
     # ---------------- INTENT CLASSIFICATION ----------------
