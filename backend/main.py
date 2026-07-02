@@ -30,9 +30,17 @@ app.include_router(router, prefix="/api")
 
 
 
+startup_error = None
+
 @app.on_event("startup")
 def startup():
-    init_db()
+    global startup_error
+    try:
+        init_db()
+    except Exception as e:
+        import traceback
+        startup_error = traceback.format_exc()
+        print(f"Startup error: {startup_error}")
 
 
 
@@ -46,4 +54,6 @@ if FRONTEND_DIR.exists():
 else:
     @app.get("/")
     async def fallback_home():
+        if startup_error:
+            return {"error": "Startup crashed", "traceback": startup_error, "path": str(FRONTEND_DIR)}
         return {"error": f"Frontend directory not found at {FRONTEND_DIR}"}
