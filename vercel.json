@@ -2,6 +2,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "backend/frontend/**",
+      "use": "@vercel/static"
+    },
+    {
       "src": "backend/main.py",
       "use": "@vercel/python"
     }
@@ -13,15 +17,15 @@
     },
     {
       "src": "/static/(.*)",
-      "dest": "/backend/frontend/$1"
+      "dest": "backend/frontend/$1"
     },
     {
       "src": "/chat/(.*)",
-      "dest": "/backend/frontend/index.html"
+      "dest": "backend/frontend/index.html"
     },
     {
       "src": "/",
-      "dest": "/backend/frontend/index.html"
+      "dest": "backend/frontend/index.html"
     },
     {
       "src": "/(.*)",
