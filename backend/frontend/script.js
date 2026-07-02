@@ -78,7 +78,12 @@ function buildSection(title, content, isCode, projectFolder, fileName) {
     dBtn.innerHTML = `<i class="fa-solid fa-download"></i> Download ${fileName}`;
     dBtn.onclick = () => {
       const url = `/api/download/file?project_folder=${encodeURIComponent(projectFolder)}&file_name=${encodeURIComponent(fileName)}`;
-      window.open(url, "_blank");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     };
     wrap.appendChild(dBtn);
   }
@@ -115,7 +120,13 @@ function buildSdlcCard(data) {
     globalZipBtn.style.marginTop = "10px";
     globalZipBtn.innerHTML = '<i class="fa-solid fa-box-archive"></i> Download Entire Project Workspace (.zip)';
     globalZipBtn.onclick = () => {
-      window.open(`/api/download/project/${encodeURIComponent(data.project_folder)}`, "_blank");
+      const url = `/api/download/project/${encodeURIComponent(data.project_folder)}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     };
     container.appendChild(globalZipBtn);
   }
