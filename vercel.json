@@ -9,6 +9,11 @@
       }
     }
   ],
+  "functions": {
+    "backend/main.py": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
