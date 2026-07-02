@@ -8,8 +8,10 @@ from fastapi.staticfiles import StaticFiles
 from backend.db import init_db
 from backend.routes import router
 
+from pathlib import Path
 
 FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+# FRONTEND_DIR = Path(__file__).resolve().parent.parent / "public"
 
 app = FastAPI()
 
@@ -25,7 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+
 
 
 @app.on_event("startup")
@@ -34,11 +36,9 @@ def startup():
 
 
 
-@app.get("/")
-async def home():
-    return FileResponse(FRONTEND_DIR / "index.html")
-
-
 @app.get("/chat/{conversation_id}")
 async def chat_page(conversation_id: str):
     return FileResponse(str(FRONTEND_DIR / "index.html"))
+
+# Mount static files last as a catch-all for local development
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
