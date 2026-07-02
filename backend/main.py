@@ -41,4 +41,9 @@ async def chat_page(conversation_id: str):
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
 # Mount static files last as a catch-all for local development
-app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
+else:
+    @app.get("/")
+    async def fallback_home():
+        return {"error": f"Frontend directory not found at {FRONTEND_DIR}"}
