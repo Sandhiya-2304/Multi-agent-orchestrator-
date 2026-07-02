@@ -196,6 +196,23 @@ async def chat(conversation_id: str, req: ChatRequest):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Chat Identifier")
 
+    # Load previous messages to build conversation history for memory
+    rows = load_messages(conv_id_int)
+    history_text = ""
+    if rows:
+        history_text = "Previous conversation context:\n"
+        for r in rows[-10:]:  # Keep only the last 10 interactions to avoid huge prompts
+            role_name = "User" if r["role"] == "user" else "Assistant"
+            content = r["content"]
+            if r["msg_type"] == "sdlc":
+                try:
+                    payload = json.loads(content)
+                    content = f"[SDLC project generated: {payload.get('project_title', 'unknown')}]"
+                except Exception:
+                    pass
+            history_text += f"{role_name}: {content}\n"
+        history_text += "\n"
+
     # Save user message
     save_message(conv_id_int, "user", "text", message)
 
@@ -204,7 +221,7 @@ async def chat(conversation_id: str, req: ChatRequest):
 
     if not is_sdlc:
         # Chat mode
-        reply = await orchestrator.handle_chat(message)
+        reply = await orchestrator.handle_chat(message, history_text)
         save_message(conv_id_int, "assistant", "text", reply)
         title = await generate_smart_chat_title(message, reply)
         update_conversation_title(conv_id_int, title)
@@ -216,7 +233,7 @@ async def chat(conversation_id: str, req: ChatRequest):
         }
 
     # SDLC mode (this can take 1-3 minutes depending on tools used by LLM)
-    payload = await orchestrator.execute_sdlc(message)
+    payload = await orchestrator.execute_sdlc(message, history_text)
 
     # Save and return
     save_message(conv_id_int, "assistant", "sdlc", json.dumps(payload))

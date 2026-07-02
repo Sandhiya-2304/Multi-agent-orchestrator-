@@ -95,17 +95,20 @@ class SDLCOrchestrator:
         return name if name else fallback
 
     # ---------------- CHAT EXECUTION ----------------
-    async def handle_chat(self, message: str) -> str:
+    async def handle_chat(self, message: str, history: str = "") -> str:
         """Handle a normal chat message using ChatAgent."""
         self.log_start("ChatAgent")
         agent = ChatAgent()
-        result = await agent.run(message)
+        prompt = message
+        if history:
+            prompt = f"{history}Current User Request: {message}"
+        result = await agent.run(prompt)
         reply = result.text if hasattr(result, "text") else str(result)
         self.log_done("ChatAgent")
         return reply
 
     # ---------------- SDLC EXECUTION ----------------
-    async def execute_sdlc(self, user_request: str) -> dict:
+    async def execute_sdlc(self, user_request: str, history: str = "") -> dict:
         
         task_name = self.clean_task_name(user_request)
         folder = os.path.join(self.output_root, task_name)
@@ -230,7 +233,8 @@ Rules:
 
         prompt = f"""
 Task: {task_name}
-User request: {user_request}
+{history}
+Current User Request: {user_request}
 """
 
         self.log_start("Orchestrator Agent (Master LLM)")

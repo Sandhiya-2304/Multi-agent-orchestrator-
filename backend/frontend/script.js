@@ -371,9 +371,10 @@ window.onload = async () => {
   const chatId = window.location.pathname.split("/")[2];
   if (chatId && chatId !== "new") {
     await openChat(chatId);
-  } else if (chatId === "new") {
+  } else {
     currentChatId = "new";
     turns = [];
+    setUrlToNewChat();
     renderMessages();
     renderChatList();
   }
