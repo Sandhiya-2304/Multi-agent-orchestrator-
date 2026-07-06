@@ -1,6 +1,6 @@
 import asyncio
 
-from backend.rag.config import RAG_EMBEDDING_MODEL
+from backend.rag.config import RAG_EMBEDDING_CACHE_DIR, RAG_EMBEDDING_MODEL
 
 
 class RAGModelUnavailableError(Exception):
@@ -13,9 +13,10 @@ _model_lock = asyncio.Lock()
 
 
 def _load_model():
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
 
-    return SentenceTransformer(RAG_EMBEDDING_MODEL)
+    kwargs = {"cache_dir": RAG_EMBEDDING_CACHE_DIR} if RAG_EMBEDDING_CACHE_DIR else {}
+    return TextEmbedding(model_name=RAG_EMBEDDING_MODEL, **kwargs)
 
 
 async def _get_model():
@@ -34,5 +35,5 @@ async def _get_model():
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
     model = await _get_model()
-    vectors = await asyncio.to_thread(model.encode, texts)
+    vectors = await asyncio.to_thread(lambda: list(model.embed(texts)))
     return [v.tolist() for v in vectors]

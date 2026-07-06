@@ -1,9 +1,19 @@
 import os
 from pathlib import Path
 
-# Embeddings are generated locally (sentence-transformers), not via an Azure
-# OpenAI deployment -- no separate embedding deployment/credentials needed.
-RAG_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# Embeddings are generated locally via fastembed (ONNX Runtime), not via an
+# Azure OpenAI deployment -- no separate embedding deployment/credentials
+# needed, and no PyTorch dependency (fastembed's onnxruntime backend is tens
+# of MB installed vs. torch's several hundred MB-to-multi-GB, which is what
+# blew past Vercel's 500MB serverless function size limit under
+# sentence-transformers). This is the ONNX port of the exact same model, so
+# embedding behavior/quality is unchanged.
+RAG_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+# fastembed caches downloaded model files under this directory. Vercel's
+# filesystem is read-only except /tmp, matching the pattern already used for
+# RAG_DIR/DB_PATH elsewhere in this app.
+RAG_EMBEDDING_CACHE_DIR = "/tmp/fastembed_cache" if os.environ.get("VERCEL") else None
 
 RAG_CHUNK_SIZE = 1500
 # No overlap by default: an overlapping tail carried into the next chunk means
