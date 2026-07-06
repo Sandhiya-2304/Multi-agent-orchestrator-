@@ -687,6 +687,10 @@ chatForm.addEventListener("submit", async (e) => {
     const data = await res.json();
     const lastTurn = turns[turns.length - 1];
 
+    if (!res.ok) {
+      throw new Error(data.detail || `Request failed (HTTP ${res.status})`);
+    }
+
     if (data.mode === "sdlc") {
       lastTurn.mode = "sdlc";
       lastTurn.sdlcData = data;
@@ -700,7 +704,7 @@ chatForm.addEventListener("submit", async (e) => {
   } catch (err) {
     console.error(err);
     const lastTurn = turns[turns.length - 1];
-    if (lastTurn) lastTurn.assistant = "Something went wrong during generation.";
+    if (lastTurn) lastTurn.assistant = `Something went wrong during generation: ${err.message}`;
   } finally {
     const lastTurn = turns[turns.length - 1];
     if (lastTurn) lastTurn.loading = false;
