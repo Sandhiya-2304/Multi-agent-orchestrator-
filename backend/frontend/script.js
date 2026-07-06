@@ -4,6 +4,35 @@ const chatForm = document.getElementById("chatForm");
 const messageInput = document.getElementById("messageInput");
 const newChatBtn = document.getElementById("newChatBtn");
 
+const sidebar = document.getElementById("sidebar");
+const sidebarToggle = document.getElementById("sidebarToggle");
+const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+
+const kbBtn = document.getElementById("kbBtn");
+const kbModal = document.getElementById("kbModal");
+const kbCloseBtn = document.getElementById("kbCloseBtn");
+const kbUploadForm = document.getElementById("kbUploadForm");
+const kbFileInput = document.getElementById("kbFileInput");
+const kbUploadStatus = document.getElementById("kbUploadStatus");
+const kbDocList = document.getElementById("kbDocList");
+
+const attachWrapper = document.getElementById("attachWrapper");
+const attachBtn = document.getElementById("attachBtn");
+const attachMenu = document.getElementById("attachMenu");
+const attachMenuUpload = document.getElementById("attachMenuUpload");
+const attachFileInput = document.getElementById("attachFileInput");
+const attachmentPreview = document.getElementById("attachmentPreview");
+const uploadStatusLine = document.getElementById("uploadStatusLine");
+const dropOverlay = document.getElementById("dropOverlay");
+const sendBtn = document.getElementById("sendBtn");
+const mainEl = document.querySelector(".main");
+
+// Files staged in the composer, not yet sent. Each entry:
+// { localId, file, status: 'pending'|'uploading'|'processing'|'success'|'error',
+//   progress, documentId, error, previewUrl }
+let pendingAttachments = [];
+let attachmentSeq = 0;
+
 let chats = [];
 let currentChatId = null;
 let turns = [];
@@ -134,12 +163,32 @@ function buildSdlcCard(data) {
   return container;
 }
 
-function buildMessage(role, content, isSdlc = false, sdlcData = null) {
+function buildMessageAttachments(attachments) {
+  if (!attachments || !attachments.length) return null;
+  const list = document.createElement("div");
+  list.className = "message-attachments";
+  attachments.forEach((att) => {
+    const chip = document.createElement("div");
+    chip.className = `message-attachment-chip${att.status === "error" ? " is-error" : ""}`;
+    const icon = att.status === "error" ? "fa-triangle-exclamation" : getFileIconClass(att.filename);
+    chip.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${escapeHtml(att.filename)}</span>`;
+    if (att.status === "error") chip.title = att.error || "Upload failed";
+    list.appendChild(chip);
+  });
+  return list;
+}
+
+function buildMessage(role, content, isSdlc = false, sdlcData = null, sources = [], attachments = []) {
   const div = document.createElement("div");
-  div.className = `message ${role}`;
+  div.className = `message ${role}${isSdlc ? " is-wide" : ""}`;
 
   const contentDiv = document.createElement("div");
   contentDiv.className = "message-content";
+
+  if (role === "user") {
+    const attachmentsEl = buildMessageAttachments(attachments);
+    if (attachmentsEl) contentDiv.appendChild(attachmentsEl);
+  }
 
   if (isSdlc && sdlcData) {
     if (content) {
@@ -149,8 +198,11 @@ function buildMessage(role, content, isSdlc = false, sdlcData = null) {
       contentDiv.appendChild(textDiv);
     }
     contentDiv.appendChild(buildSdlcCard(sdlcData));
+    sources = sdlcData.sources || sources;
   } else {
-    contentDiv.innerHTML = markdownToHtml(content);
+    const textDiv = document.createElement("div");
+    textDiv.innerHTML = markdownToHtml(content);
+    contentDiv.appendChild(textDiv);
   }
 
   div.appendChild(contentDiv);
@@ -161,7 +213,7 @@ function renderMessages() {
   chatMessages.innerHTML = "";
 
   turns.forEach((turn) => {
-    chatMessages.appendChild(buildMessage("user", turn.user, false, null));
+    chatMessages.appendChild(buildMessage("user", turn.user, false, null, [], turn.attachments || []));
 
     if (turn.loading) {
       const loadingDiv = document.createElement("div");
@@ -178,7 +230,7 @@ function renderMessages() {
     if (turn.mode === "sdlc") {
       chatMessages.appendChild(buildMessage("assistant", turn.sdlcData?.reply || "", true, turn.sdlcData));
     } else if (turn.assistant) {
-      chatMessages.appendChild(buildMessage("assistant", turn.assistant, false, null));
+      chatMessages.appendChild(buildMessage("assistant", turn.assistant, false, null, turn.sources || []));
     }
   });
 
@@ -194,7 +246,10 @@ function renderChatList() {
 
     const title = document.createElement("span");
     title.textContent = chat.title || "Chat Workspace";
-    title.onclick = () => openChat(chat.id);
+    title.onclick = () => {
+      openChat(chat.id);
+      closeSidebar();
+    };
 
     const del = document.createElement("button");
     del.type = "button";
@@ -249,6 +304,7 @@ async function openChat(chatId) {
           mode: "chat",
           loading: false,
           sdlcData: null,
+          attachments: (msg.attachment_filenames || []).map((filename) => ({ filename, status: "success" })),
         };
         turns.push(lastTurn);
       } else if (msg.role === "assistant" && lastTurn) {
@@ -287,11 +343,278 @@ function guessIntent(text) {
   return (hasVerb && hasNoun) || hasExplicit ? "sdlc" : "chat";
 }
 
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]);
+
+function getFileIconClass(filename) {
+  const ext = String(filename || "").split(".").pop().toLowerCase();
+  if (ext === "pdf") return "fa-file-pdf";
+  if (ext === "docx" || ext === "doc") return "fa-file-word";
+  if (ext === "xlsx" || ext === "xls" || ext === "csv") return "fa-file-excel";
+  if (ext === "pptx" || ext === "ppt") return "fa-file-powerpoint";
+  if (ext === "json") return "fa-file-code";
+  if (ext === "zip") return "fa-file-zipper";
+  if (IMAGE_EXTENSIONS.has(ext)) return "fa-file-image";
+  return "fa-file-lines"; // .txt / .md
+}
+
+function isImageFile(filename) {
+  const ext = String(filename || "").split(".").pop().toLowerCase();
+  return IMAGE_EXTENSIONS.has(ext);
+}
+
+function formatFileSize(bytes) {
+  if (!bytes && bytes !== 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function buildAttachmentCard(att) {
+  const card = document.createElement("div");
+  card.className = `attachment-card is-${att.status}`;
+
+  const iconWrap = document.createElement("div");
+  iconWrap.className = "attachment-file-icon";
+  if (att.previewUrl) {
+    iconWrap.innerHTML = `<img src="${att.previewUrl}" alt="" class="attachment-thumb" />`;
+  } else if (att.status === "error") {
+    iconWrap.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>`;
+  } else {
+    iconWrap.innerHTML = `<i class="fa-solid ${getFileIconClass(att.file.name)}"></i>`;
+  }
+  card.appendChild(iconWrap);
+
+  const info = document.createElement("div");
+  info.className = "attachment-file-info";
+
+  const name = document.createElement("span");
+  name.className = "attachment-file-name";
+  name.textContent = att.file.name;
+  info.appendChild(name);
+
+  const meta = document.createElement("span");
+  meta.className = "attachment-file-meta";
+  if (att.status === "uploading") {
+    meta.textContent = `Uploading… ${att.progress}%`;
+  } else if (att.status === "processing") {
+    meta.textContent = att.statusText || "Processing…";
+  } else if (att.status === "success") {
+    meta.textContent = formatFileSize(att.file.size);
+  } else if (att.status === "error") {
+    meta.textContent = att.error || "Upload failed";
+  } else {
+    meta.textContent = formatFileSize(att.file.size);
+  }
+  info.appendChild(meta);
+
+  card.appendChild(info);
+
+  if (att.status === "uploading" || att.status === "processing") {
+    const track = document.createElement("div");
+    track.className = "attachment-progress-track";
+    const bar = document.createElement("div");
+    bar.className = "attachment-progress-bar";
+    bar.style.width = `${att.status === "processing" ? 100 : att.progress}%`;
+    track.appendChild(bar);
+    card.appendChild(track);
+  }
+
+  const statusIcon = document.createElement("span");
+  statusIcon.className = "attachment-status-icon";
+  if (att.status === "success") statusIcon.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
+  if (att.status === "error") statusIcon.innerHTML = `<i class="fa-solid fa-rotate-right"></i>`;
+  if (statusIcon.innerHTML) card.appendChild(statusIcon);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "attachment-remove-btn";
+  removeBtn.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+  removeBtn.disabled = att.status === "uploading" || att.status === "processing";
+  removeBtn.onclick = () => removeAttachment(att.localId);
+  card.appendChild(removeBtn);
+
+  return card;
+}
+
+function renderAttachmentPreview() {
+  attachmentPreview.innerHTML = "";
+
+  if (!pendingAttachments.length) {
+    attachmentPreview.classList.add("hidden");
+    return;
+  }
+
+  attachmentPreview.classList.remove("hidden");
+  pendingAttachments.forEach((att) => attachmentPreview.appendChild(buildAttachmentCard(att)));
+}
+
+function setUploadStatusLine(text) {
+  if (!text) {
+    uploadStatusLine.classList.add("hidden");
+    uploadStatusLine.innerHTML = "";
+    return;
+  }
+  uploadStatusLine.classList.remove("hidden");
+  uploadStatusLine.innerHTML = `<span class="typing-dots"><span></span><span></span><span></span></span> ${escapeHtml(text)}`;
+}
+
+function addFiles(fileList) {
+  Array.from(fileList || []).forEach((file) => {
+    const att = {
+      localId: ++attachmentSeq,
+      file,
+      status: "pending",
+      progress: 0,
+      documentId: null,
+      error: null,
+      previewUrl: isImageFile(file.name) ? URL.createObjectURL(file) : null,
+    };
+    pendingAttachments.push(att);
+  });
+  renderAttachmentPreview();
+}
+
+function removeAttachment(localId) {
+  const att = pendingAttachments.find((a) => a.localId === localId);
+  if (att && att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+  pendingAttachments = pendingAttachments.filter((a) => a.localId !== localId);
+  renderAttachmentPreview();
+}
+
+function uploadFileWithProgress(file, conversationId, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/documents/upload");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        // non-JSON error body, fall through with generic message below
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data.detail || `Upload failed (HTTP ${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    const formData = new FormData();
+    formData.append("file", file);
+    // Files attached from inside a chat are private to that conversation --
+    // only the Knowledge Base modal (which omits this) shares a file everywhere.
+    if (conversationId) formData.append("conversation_id", conversationId);
+    xhr.send(formData);
+  });
+}
+
+async function uploadAttachment(att) {
+  att.status = "uploading";
+  att.progress = 0;
+  att.error = null;
+  renderAttachmentPreview();
+
+  try {
+    const data = await uploadFileWithProgress(att.file, currentChatId, (pct) => {
+      att.progress = pct;
+      renderAttachmentPreview();
+    });
+
+    att.status = "processing";
+    att.statusText = "Processing document…";
+    renderAttachmentPreview();
+    await new Promise((r) => setTimeout(r, 300));
+
+    att.statusText = "Generating embeddings…";
+    renderAttachmentPreview();
+    await new Promise((r) => setTimeout(r, 300));
+
+    att.documentId = data.id;
+    att.status = "success";
+  } catch (err) {
+    att.status = "error";
+    att.error = err.message || "Upload failed";
+  }
+  renderAttachmentPreview();
+}
+
+async function uploadPendingAttachments() {
+  const toUpload = pendingAttachments.filter((a) => a.status !== "success");
+  if (!toUpload.length) return;
+
+  sendBtn.disabled = true;
+  setUploadStatusLine("Uploading files...");
+  await Promise.all(toUpload.map((att) => uploadAttachment(att)));
+
+  const anyFailed = pendingAttachments.some((a) => a.status === "error");
+  setUploadStatusLine(anyFailed ? "" : "Ready.");
+  if (!anyFailed) {
+    setTimeout(() => setUploadStatusLine(""), 600);
+  }
+  sendBtn.disabled = false;
+}
+
+function closeAttachMenu() {
+  attachMenu.classList.add("hidden");
+}
+
+attachBtn.onclick = () => {
+  attachMenu.classList.toggle("hidden");
+};
+
+attachMenuUpload.onclick = () => {
+  closeAttachMenu();
+  attachFileInput.click();
+};
+
+document.addEventListener("click", (e) => {
+  if (!attachWrapper.contains(e.target)) closeAttachMenu();
+});
+
+attachFileInput.addEventListener("change", () => {
+  addFiles(attachFileInput.files);
+  attachFileInput.value = "";
+});
+
+// Drag and drop: dragging files anywhere over the chat window highlights a
+// drop zone; dropping stages the files exactly like picking them manually.
+let dragDepth = 0;
+
+mainEl.addEventListener("dragenter", (e) => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+  e.preventDefault();
+  dragDepth++;
+  dropOverlay.classList.remove("hidden");
+});
+
+mainEl.addEventListener("dragover", (e) => {
+  if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+  e.preventDefault();
+});
+
+mainEl.addEventListener("dragleave", (e) => {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) dropOverlay.classList.add("hidden");
+});
+
+mainEl.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  dropOverlay.classList.add("hidden");
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+    addFiles(e.dataTransfer.files);
+  }
+});
+
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const text = messageInput.value.trim();
-  if (!text || isLoading) return;
+  if ((!text && !pendingAttachments.length) || isLoading) return;
 
   isLoading = true;
 
@@ -308,6 +631,26 @@ chatForm.addEventListener("submit", async (e) => {
     }
   }
 
+  if (pendingAttachments.length) {
+    await uploadPendingAttachments();
+  }
+
+  const attachmentsForTurn = pendingAttachments.map((att) => ({
+    filename: att.file.name,
+    status: att.status,
+    error: att.error,
+  }));
+  const successfulAttachments = pendingAttachments.filter((a) => a.status === "success");
+
+  if (!text) {
+    // Files-only send: leave successfully uploaded files staged (already
+    // associated with this chat's document pool) until the user actually
+    // types something to ask about them; failed ones stay staged for retry.
+    isLoading = false;
+    renderAttachmentPreview();
+    return;
+  }
+
   const expectedMode = guessIntent(text);
 
   const turn = {
@@ -317,17 +660,28 @@ chatForm.addEventListener("submit", async (e) => {
     expectedMode: expectedMode,
     loading: true,
     sdlcData: null,
+    sources: [],
+    attachments: attachmentsForTurn,
   };
 
   turns.push(turn);
   messageInput.value = "";
+  pendingAttachments.forEach((att) => {
+    if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+  });
+  pendingAttachments = [];
+  renderAttachmentPreview();
   renderMessages();
 
   try {
     const res = await fetch(`/api/chat/${encodeURIComponent(currentChatId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({
+        message: text,
+        attachment_filenames: successfulAttachments.map((a) => a.file.name),
+        attachment_document_ids: successfulAttachments.map((a) => a.documentId),
+      }),
     });
 
     const data = await res.json();
@@ -339,6 +693,7 @@ chatForm.addEventListener("submit", async (e) => {
     } else {
       lastTurn.mode = "chat";
       lastTurn.assistant = data.reply || "";
+      lastTurn.sources = data.sources || [];
     }
 
     await loadChats();
@@ -374,7 +729,28 @@ newChatBtn.onclick = async () => {
   setUrlToNewChat();
   renderMessages();
   renderChatList();
+  closeSidebar();
 };
+
+function openSidebar() {
+  sidebar.classList.add("is-open");
+  sidebarBackdrop.classList.remove("hidden");
+}
+
+function closeSidebar() {
+  sidebar.classList.remove("is-open");
+  sidebarBackdrop.classList.add("hidden");
+}
+
+sidebarToggle.addEventListener("click", () => {
+  if (sidebar.classList.contains("is-open")) {
+    closeSidebar();
+  } else {
+    openSidebar();
+  }
+});
+
+sidebarBackdrop.addEventListener("click", closeSidebar);
 
 window.onload = async () => {
   await loadChats();
@@ -395,5 +771,69 @@ window.addEventListener("popstate", async () => {
   const chatId = window.location.pathname.split("/")[2];
   if (chatId && chatId !== "new") {
     await openChat(chatId);
+  }
+});
+
+async function loadDocuments() {
+  const res = await fetch("/api/documents");
+  const docs = await res.json();
+  kbDocList.innerHTML = "";
+
+  if (!docs.length) {
+    kbDocList.innerHTML = `<p class="kb-status">No documents uploaded yet.</p>`;
+    return;
+  }
+
+  docs.forEach((doc) => {
+    const row = document.createElement("div");
+    row.className = "kb-doc-item";
+
+    const label = document.createElement("span");
+    label.textContent = `${doc.filename} · ${doc.chunk_count} chunks`;
+    row.appendChild(label);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.innerHTML = `<i class="fa-solid fa-trash"></i>`;
+    del.onclick = async () => {
+      await fetch(`/api/documents/${doc.id}`, { method: "DELETE" });
+      await loadDocuments();
+    };
+    row.appendChild(del);
+
+    kbDocList.appendChild(row);
+  });
+}
+
+kbBtn.onclick = async () => {
+  kbModal.classList.remove("hidden");
+  kbUploadStatus.textContent = "";
+  await loadDocuments();
+};
+
+kbCloseBtn.onclick = () => kbModal.classList.add("hidden");
+
+kbModal.addEventListener("click", (e) => {
+  if (e.target === kbModal) kbModal.classList.add("hidden");
+});
+
+kbUploadForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const file = kbFileInput.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+  kbUploadStatus.textContent = "Uploading…";
+
+  try {
+    const res = await fetch("/api/documents/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Upload failed");
+    kbUploadStatus.textContent = `Uploaded "${data.filename}" (${data.chunk_count} chunks).`;
+    kbFileInput.value = "";
+    await loadDocuments();
+  } catch (err) {
+    kbUploadStatus.textContent = err.message;
   }
 });

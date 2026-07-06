@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
 
 from backend.db import (
@@ -21,9 +21,34 @@ from backend.db import (
 from backend.schemas import ChatRequest, LoginRequest
 from backend.orchestrator.orchestrator import SDLCOrchestrator
 from backend.service.service import OpenAIService
+from backend.rag.config import (
+    ALLOWED_EXTENSIONS,
+    RAG_ATTACHMENT_MAX_CHARS,
+    RAG_ATTACHMENT_MAX_CHARS_LIST,
+    RAG_FULL_CONTEXT_CHAR_BUDGET,
+    RAG_LIST_MIN_SCORE,
+    RAG_LIST_TOP_K,
+    RAG_MAX_UPLOAD_MB,
+    RAG_MIN_SCORE,
+    RAG_TOP_K,
+)
+from backend.rag.knowledge_base import RAGModelUnavailableError, RAGService
 from agent_framework import Agent
 
 router = APIRouter()
+
+# Questions asking for every matching record ("list all IT students in the
+# hostel") need broad recall across the whole source table, not just the
+# handful of chunks closest to the query's own wording -- a top-4 similarity
+# search reliably returns one or two rows and nothing else for these.
+_LISTING_INTENT_RE = re.compile(
+    r"\b(all|every|each|list|everyone|who\s+are|how\s+many|complete\s+list|full\s+list|names?\s+of)\b",
+    re.IGNORECASE,
+)
+
+
+def is_listing_query(message: str) -> bool:
+    return bool(_LISTING_INTENT_RE.search(message or ""))
 
 import os
 
@@ -36,6 +61,9 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Shared Orchestrator Instance
 orchestrator = SDLCOrchestrator()
+
+# Shared RAG Service Instance
+rag_service = RAGService()
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +153,49 @@ def download_single_agent_file(project_folder: str = Query(...), file_name: str 
 
 
 # ---------------------------------------------------------------------------
+# Knowledge Base (RAG) Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/documents/upload")
+async def upload_document(file: UploadFile = File(...), conversation_id: str | None = Form(None)):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or '(none)'}")
+
+    raw = await file.read()
+    if len(raw) > RAG_MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File exceeds {RAG_MAX_UPLOAD_MB} MB limit")
+
+    # A file attached from inside a chat is private to that conversation --
+    # only the Knowledge Base modal (which never sends conversation_id) adds
+    # to the shared store visible everywhere.
+    conv_id_int = None
+    if conversation_id and conversation_id != "new":
+        try:
+            conv_id_int = int(conversation_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Chat Identifier")
+
+    try:
+        return await rag_service.ingest_document(file.filename, raw, conversation_id=conv_id_int)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RAGModelUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/documents")
+def get_documents():
+    return rag_service.list_documents()
+
+
+@router.delete("/documents/{document_id}")
+def remove_document(document_id: int):
+    rag_service.delete_document(document_id)
+    return {"ok": True, "document_id": document_id}
+
+
+# ---------------------------------------------------------------------------
 # Chat CRUD Endpoints
 # ---------------------------------------------------------------------------
 
@@ -169,7 +240,12 @@ def get_chat(conversation_id: str):
             except Exception:
                 formatted_messages.append({"role": row["role"], "msg_type": "text", "content": row["content"]})
         else:
-            formatted_messages.append({"role": row["role"], "msg_type": "text", "content": row["content"]})
+            formatted_messages.append({
+                "role": row["role"],
+                "msg_type": "text",
+                "content": row["content"],
+                "attachment_filenames": row.get("attachment_filenames") or [],
+            })
 
     return {"id": conv_id_int, "messages": formatted_messages}
 
@@ -220,14 +296,84 @@ async def chat(conversation_id: str, req: ChatRequest):
         history_text += "\n"
 
     # Save user message
-    save_message(conv_id_int, "user", "text", message)
+    save_message(conv_id_int, "user", "text", message, attachment_filenames=req.attachment_filenames)
 
-    # Use basic heuristic in orchestrator to decide routing
-    is_sdlc = orchestrator.is_sdlc_request(message)
+    # Retrieve knowledge-base context, scoped to what THIS conversation is
+    # allowed to see. If this chat has its own uploaded file(s), scope
+    # STRICTLY to those and ignore the shared Knowledge Base entirely --
+    # otherwise a question this chat's file doesn't answer could still get
+    # answered from unrelated shared documents, which looks like the wrong
+    # file's information leaking in. The shared Knowledge Base only grounds
+    # chats that haven't attached anything of their own.
+    sources: list[dict] = []
+    context_blocks: list[str] = []
+    listing_query = is_listing_query(message)
+    own_doc_ids = rag_service.document_ids_owned_by_conversation(conv_id_int)
+    allowed_doc_ids = own_doc_ids if own_doc_ids else rag_service.document_ids_for_conversation(conv_id_int)
+
+    if allowed_doc_ids:
+        if rag_service.total_content_chars_for_documents(allowed_doc_ids) <= RAG_FULL_CONTEXT_CHAR_BUDGET:
+            # Small enough: don't gamble on similarity search finding every
+            # relevant row for every possible phrasing of a question -- just
+            # hand the model every document this conversation can see, in full.
+            for doc_id in allowed_doc_ids:
+                full = rag_service.get_document_context(doc_id, max_chars=RAG_ATTACHMENT_MAX_CHARS_LIST)
+                if full:
+                    context_blocks.append(f"[Source: {full['filename']}]\n{full['text']}")
+                    sources.append({"document_id": full["document_id"], "filename": full["filename"], "score": 1.0})
+        else:
+            top_k = RAG_LIST_TOP_K if listing_query else RAG_TOP_K
+            min_score = RAG_LIST_MIN_SCORE if listing_query else RAG_MIN_SCORE
+            hits = await rag_service.retrieve(
+                message, top_k=top_k, min_score=min_score, allowed_document_ids=allowed_doc_ids
+            )
+
+            if listing_query:
+                # Chunk-level top-k is fundamentally the wrong tool for "list
+                # everyone matching X" -- any fixed k can still land short of
+                # every matching row. Use the hits only to find WHICH documents
+                # are relevant, then pull each one's full text so no row from a
+                # relevant document is left out. Capped to the best few
+                # documents so this can't blow up context size if many
+                # unrelated documents share a stray keyword.
+                seen_doc_ids: list[int] = []
+                for h in hits:
+                    if h["document_id"] not in seen_doc_ids:
+                        seen_doc_ids.append(h["document_id"])
+                for doc_id in seen_doc_ids[:3]:
+                    full = rag_service.get_document_context(doc_id, max_chars=RAG_ATTACHMENT_MAX_CHARS_LIST)
+                    if full:
+                        context_blocks.append(f"[Source: {full['filename']}]\n{full['text']}")
+                        sources.append({"document_id": full["document_id"], "filename": full["filename"], "score": 1.0})
+            else:
+                for h in hits:
+                    context_blocks.append(f"[Source: {h['filename']}]\n{h['text']}")
+                    sources.append({"document_id": h["document_id"], "filename": h["filename"], "score": round(h["score"], 3)})
+
+    # Files attached to *this* message are always used, regardless of how well
+    # the question's wording matches them via similarity search -- otherwise
+    # generic questions like "what is this file about?" retrieve nothing.
+    # Only honored if the document actually belongs to this conversation (or
+    # the shared KB) -- a stray/forged document_id from elsewhere is ignored.
+    attachment_max_chars = RAG_ATTACHMENT_MAX_CHARS_LIST if listing_query else RAG_ATTACHMENT_MAX_CHARS
+    for doc_id in req.attachment_document_ids:
+        if doc_id not in allowed_doc_ids:
+            continue
+        if any(s["document_id"] == doc_id for s in sources):
+            continue
+        attached = rag_service.get_document_context(doc_id, max_chars=attachment_max_chars)
+        if attached:
+            context_blocks.insert(0, f"[Attached file: {attached['filename']}]\n{attached['text']}")
+            sources.insert(0, {"document_id": attached["document_id"], "filename": attached["filename"], "score": 1.0})
+
+    context_text = "\n\n".join(context_blocks)
+
+    # Use the intent classifier in the orchestrator to decide routing
+    is_sdlc = await orchestrator.is_sdlc_request(message)
 
     if not is_sdlc:
         # Chat mode
-        reply = await orchestrator.handle_chat(message, history_text)
+        reply = await orchestrator.handle_chat(message, history_text, context_text)
         save_message(conv_id_int, "assistant", "text", reply)
         title = await generate_smart_chat_title(message, reply)
         update_conversation_title(conv_id_int, title)
@@ -236,10 +382,12 @@ async def chat(conversation_id: str, req: ChatRequest):
             "mode": "chat",
             "msg_type": "text",
             "reply": reply,
+            "sources": sources,
         }
 
     # SDLC mode (this can take 1-3 minutes depending on tools used by LLM)
-    payload = await orchestrator.execute_sdlc(message, history_text)
+    payload = await orchestrator.execute_sdlc(message, history_text, context_text)
+    payload["sources"] = sources
 
     # Save and return
     save_message(conv_id_int, "assistant", "sdlc", json.dumps(payload))

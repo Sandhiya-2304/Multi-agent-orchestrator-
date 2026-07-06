@@ -28,11 +28,10 @@ class SDLCOrchestrator:
         self.output_root.mkdir(parents=True, exist_ok=True)
 
     # ---------------- INTENT CLASSIFICATION ----------------
-    def is_sdlc_request(self, message: str) -> bool:
-        """
-        Simple heuristic to detect if this is an SDLC project request 
-        or just a normal chat.
-        """
+    def _is_sdlc_request_fallback(self, message: str) -> bool:
+        """Keyword heuristic used only if the classifier call below fails
+        (e.g. the model deployment is briefly unreachable) -- deliberately
+        crude, since it exists purely as a safety net, not the real decision."""
         text = (message or "").lower().strip()
         project_verbs = [
             "create", "build", "develop", "generate", "design", "implement",
@@ -43,13 +42,53 @@ class SDLCOrchestrator:
             "website", "web app", "webapp", "service", "tool", "portal",
             "dashboard", "backend", "frontend", "software", "crud"
         ]
-        
         has_verb = any(v in text for v in project_verbs)
         has_noun = any(n in text for n in project_nouns)
-        
-        explicit = any(t in text for t in ["sdlc", "pipeline", "only code", "documentation only", "requirements +"])
-        
-        return (has_verb and has_noun) or explicit
+        return has_verb and has_noun
+
+    async def is_sdlc_request(self, message: str) -> bool:
+        """
+        Decide whether this message is asking for a full SDLC project build
+        (requirements/architecture/code/tests/docs/deployment) versus a normal
+        chat question. A fixed verb+noun keyword match is too brittle -- real
+        requests are phrased in far too many ways for a keyword list to catch
+        ("I need a tool that tracks hostel residents", "set up a REST API for
+        orders", etc.), so an LLM call decides instead, the same way title
+        generation and chat intent already do elsewhere in this app.
+        """
+        text = (message or "").lower().strip()
+
+        # Fast, unambiguous shortcut -- skip the round-trip when the user says
+        # so explicitly.
+        if any(t in text for t in ["sdlc", "pipeline", "only code", "documentation only", "requirements +"]):
+            return True
+
+        try:
+            classifier = Agent(
+                client=OpenAIService(),
+                instructions="""
+You classify a user's chat message for a developer assistant that can either (a) hold
+a normal conversation, or (b) run a full SDLC pipeline that generates requirements,
+architecture, code, tests, documentation, and deployment instructions for a software
+project.
+
+Classify as SDLC if the user is asking to build, create, generate, scaffold, or
+develop an application, system, API, website, tool, script, or any other software
+artifact -- regardless of exact phrasing.
+
+Classify as CHAT for everything else: questions, explanations, comparisons, casual
+conversation, or requests to just talk about code/architecture without generating a
+project.
+
+Reply with EXACTLY one word, nothing else: SDLC or CHAT.
+""",
+            )
+            result = await classifier.run(f"Message: {message}")
+            verdict = (result.text if hasattr(result, "text") else str(result)).strip().upper()
+            return verdict.startswith("SDLC")
+        except Exception as e:
+            print(f"[orchestrator] intent classifier failed, falling back to heuristic: {e}")
+            return self._is_sdlc_request_fallback(message)
 
     # ---------------- CLEAN TASK NAME ----------------
     def clean_task_name(self, name: str) -> str:
@@ -98,20 +137,26 @@ class SDLCOrchestrator:
         return name if name else fallback
 
     # ---------------- CHAT EXECUTION ----------------
-    async def handle_chat(self, message: str, history: str = "") -> str:
+    async def handle_chat(self, message: str, history: str = "", context: str = "") -> str:
         """Handle a normal chat message using ChatAgent."""
         self.log_start("ChatAgent")
         agent = ChatAgent()
+        context_block = (
+            f"Reference Context (from the internal knowledge base — use this information "
+            f"to answer accurately, but do not mention filenames or say \"according to the "
+            f"knowledge base\"; just answer naturally):\n{context}\n\n"
+            if context else ""
+        )
         prompt = message
-        if history:
-            prompt = f"{history}Current User Request: {message}"
+        if history or context_block:
+            prompt = f"{history}{context_block}Current User Request: {message}"
         result = await agent.run(prompt)
         reply = result.text if hasattr(result, "text") else str(result)
         self.log_done("ChatAgent")
         return reply
 
     # ---------------- SDLC EXECUTION ----------------
-    async def execute_sdlc(self, user_request: str, history: str = "") -> dict:
+    async def execute_sdlc(self, user_request: str, history: str = "", context: str = "") -> dict:
         
         task_name = self.clean_task_name(user_request)
         folder = os.path.join(self.output_root, task_name)
@@ -154,6 +199,13 @@ You have access to these tools (specialist agents):
   Use this to generate deployment plans and instructions based on the project name.
 
 Rules:
+
+0. REFERENCE CONTEXT (IF PROVIDED)
+   - If a "Reference Context" section appears in the prompt, treat it as authoritative
+     supporting material and incorporate relevant facts into REQUIREMENTS/ARCHITECTURE/
+     DOCUMENTATION as appropriate. Do not mention filenames or say "according to the
+     knowledge base" anywhere in the output — just use the facts naturally.
+   - If no such section is present, proceed exactly as you do today.
 
 1. UNDERSTAND THE USER REQUEST (SELECTIVE EXECUTION)
    - CRITICAL: If the user asks for ONLY documentation (e.g., "Generate only documentation"), YOU MUST ONLY output [DOCUMENTATION] and [FILENAME]. DO NOT call code_generation, do not output [CODE], do not output [TESTING], etc.
@@ -234,9 +286,14 @@ Rules:
             ],
         )
 
+        context_block = (
+            f"\nReference Context (from internal knowledge base — incorporate naturally, "
+            f"do not mention filenames or the knowledge base):\n{context}\n" if context else ""
+        )
+
         prompt = f"""
 Task: {task_name}
-{history}
+{history}{context_block}
 Current User Request: {user_request}
 """
 
