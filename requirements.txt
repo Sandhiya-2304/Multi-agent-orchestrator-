@@ -1,0 +1,13 @@
+python-dotenv>=1.0.0
+agent-framework-core>=0.1.0
+agent-framework-openai>=0.1.0
+fastapi
+uvicorn
+python-multipart>=0.0.9
+faiss-cpu>=1.8.0
+numpy>=1.26.0
+pypdf>=4.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+python-pptx>=0.6.23
+fastembed>=0.4.0
