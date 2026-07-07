@@ -48,6 +48,10 @@ def startup():
 async def chat_page(conversation_id: str):
     return FileResponse(str(FRONTEND_DIR / "index.html"))
 
+@app.get("/")
+async def root_page():
+    return FileResponse(str(FRONTEND_DIR / "index.html"))
+
 # Mount static files last as a catch-all for local development
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
