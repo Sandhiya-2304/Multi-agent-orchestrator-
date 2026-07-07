@@ -8,13 +8,7 @@ const sidebar = document.getElementById("sidebar");
 const sidebarToggle = document.getElementById("sidebarToggle");
 const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
-const kbBtn = document.getElementById("kbBtn");
-const kbModal = document.getElementById("kbModal");
-const kbCloseBtn = document.getElementById("kbCloseBtn");
-const kbUploadForm = document.getElementById("kbUploadForm");
-const kbFileInput = document.getElementById("kbFileInput");
-const kbUploadStatus = document.getElementById("kbUploadStatus");
-const kbDocList = document.getElementById("kbDocList");
+
 
 const attachWrapper = document.getElementById("attachWrapper");
 const attachBtn = document.getElementById("attachBtn");
@@ -775,69 +769,5 @@ window.addEventListener("popstate", async () => {
   const chatId = window.location.pathname.split("/")[2];
   if (chatId && chatId !== "new") {
     await openChat(chatId);
-  }
-});
-
-async function loadDocuments() {
-  const res = await fetch("/api/documents");
-  const docs = await res.json();
-  kbDocList.innerHTML = "";
-
-  if (!docs.length) {
-    kbDocList.innerHTML = `<p class="kb-status">No documents uploaded yet.</p>`;
-    return;
-  }
-
-  docs.forEach((doc) => {
-    const row = document.createElement("div");
-    row.className = "kb-doc-item";
-
-    const label = document.createElement("span");
-    label.textContent = `${doc.filename} · ${doc.chunk_count} chunks`;
-    row.appendChild(label);
-
-    const del = document.createElement("button");
-    del.type = "button";
-    del.innerHTML = `<i class="fa-solid fa-trash"></i>`;
-    del.onclick = async () => {
-      await fetch(`/api/documents/${doc.id}`, { method: "DELETE" });
-      await loadDocuments();
-    };
-    row.appendChild(del);
-
-    kbDocList.appendChild(row);
-  });
-}
-
-kbBtn.onclick = async () => {
-  kbModal.classList.remove("hidden");
-  kbUploadStatus.textContent = "";
-  await loadDocuments();
-};
-
-kbCloseBtn.onclick = () => kbModal.classList.add("hidden");
-
-kbModal.addEventListener("click", (e) => {
-  if (e.target === kbModal) kbModal.classList.add("hidden");
-});
-
-kbUploadForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const file = kbFileInput.files[0];
-  if (!file) return;
-
-  const formData = new FormData();
-  formData.append("file", file);
-  kbUploadStatus.textContent = "Uploading…";
-
-  try {
-    const res = await fetch("/api/documents/upload", { method: "POST", body: formData });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Upload failed");
-    kbUploadStatus.textContent = `Uploaded "${data.filename}" (${data.chunk_count} chunks).`;
-    kbFileInput.value = "";
-    await loadDocuments();
-  } catch (err) {
-    kbUploadStatus.textContent = err.message;
   }
 });
