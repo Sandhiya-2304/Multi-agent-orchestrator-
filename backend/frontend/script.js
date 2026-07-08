@@ -9,6 +9,10 @@ const sidebarToggle = document.getElementById("sidebarToggle");
 const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
 let msalInstance = null;
+// Identifies the signed-in account so the backend can scope each user to
+// their own chats. Set once auth resolves in initAuth(); every chat-related
+// fetch must send it via authHeaders() below.
+let currentUserId = null;
 const loginPage = document.getElementById("loginPage");
 const chatApp = document.getElementById("chatApp");
 const msLoginBtn = document.getElementById("msLoginBtn");
@@ -59,6 +63,10 @@ function markdownToHtml(md) {
   html = html.replace(/`([^`]+)`/gim, "<code>$1</code>");
   html = html.replace(/\n/g, "<br>");
   return html;
+}
+
+function authHeaders() {
+  return currentUserId ? { "X-User-Id": currentUserId } : {};
 }
 
 function getInitials(name) {
@@ -287,7 +295,7 @@ function renderChatList() {
     del.onclick = async (e) => {
       e.stopPropagation();
       closeAllChatItemMenus();
-      await fetch(`/api/chats/${chat.id}`, { method: "DELETE" });
+      await fetch(`/api/chats/${chat.id}`, { method: "DELETE", headers: authHeaders() });
       chats = chats.filter((c) => String(c.id) !== String(chat.id));
 
       if (String(currentChatId) === String(chat.id)) {
@@ -325,7 +333,7 @@ document.addEventListener("click", (e) => {
 });
 
 async function loadChats() {
-  const res = await fetch("/api/chats");
+  const res = await fetch("/api/chats", { headers: authHeaders() });
   chats = await res.json();
   renderChatList();
 }
@@ -339,7 +347,7 @@ async function openChat(chatId) {
   renderMessages();
   renderChatList();
 
-  const res = await fetch(`/api/chat/${encodeURIComponent(cleanId)}`);
+  const res = await fetch(`/api/chat/${encodeURIComponent(cleanId)}`, { headers: authHeaders() });
   const data = await res.json();
 
   if (Array.isArray(data.messages)) {
@@ -669,7 +677,7 @@ chatForm.addEventListener("submit", async (e) => {
 
   if (!currentChatId || currentChatId === "new") {
     try {
-      const res = await fetch("/api/chats/new", { method: "POST" });
+      const res = await fetch("/api/chats/new", { method: "POST", headers: authHeaders() });
       const data = await res.json();
       currentChatId = String(data.chat_id);
       setUrlToChatId(currentChatId);
@@ -725,7 +733,7 @@ chatForm.addEventListener("submit", async (e) => {
   try {
     const res = await fetch(`/api/chat/${encodeURIComponent(currentChatId)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({
         message: text,
         attachment_filenames: successfulAttachments.map((a) => a.file.name),
@@ -827,6 +835,7 @@ async function initAuth() {
 
     if (!config.clientId) {
       console.warn("No VITE_CLIENT_ID found. Running in local dev auth mode.");
+      currentUserId = "local-dev-user";
       const userNameDisplay = document.getElementById("userNameDisplay");
       if (userNameDisplay) userNameDisplay.textContent = "Local User";
       if (profileAvatar) profileAvatar.textContent = "U";
@@ -881,6 +890,7 @@ async function initAuth() {
     const response = await msalInstance.handleRedirectPromise();
     if (response) {
       // Successful login from redirect
+      currentUserId = response.account.homeAccountId || response.account.username;
       const userNameDisplay = document.getElementById("userNameDisplay");
       const displayStr = response.account.username || response.account.name;
       if (userNameDisplay) userNameDisplay.textContent = displayStr;
@@ -892,6 +902,7 @@ async function initAuth() {
 
     const accounts = msalInstance.getAllAccounts();
     if (accounts.length > 0) {
+      currentUserId = accounts[0].homeAccountId || accounts[0].username;
       const userNameDisplay = document.getElementById("userNameDisplay");
       const displayStr = accounts[0].username || accounts[0].name;
       if (userNameDisplay) userNameDisplay.textContent = displayStr;
@@ -902,8 +913,15 @@ async function initAuth() {
       showLoginPage();
     }
   } catch (err) {
+    // Fail closed: any error during auth setup (auth-config fetch, MSAL SDK
+    // failing to load/init, a bad redirect response, ...) must never grant
+    // access to the app -- show the login page and let the user retry.
     console.error("Failed to load auth config or login", err);
-    showChatApp(); // Fallback if API fails
+    if (msLoginBtn) {
+      msLoginBtn.disabled = true;
+      msLoginBtn.querySelector("span").textContent = "Sign-in unavailable — please refresh";
+    }
+    showLoginPage();
   }
 }
 

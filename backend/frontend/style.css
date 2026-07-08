@@ -1336,6 +1336,12 @@ body {
   outline-offset: 2px;
 }
 
+.ms-login-btn:disabled {
+  background-color: #8a8886;
+  border-color: #8a8886;
+  cursor: not-allowed;
+}
+
 .ms-btn-icon {
   width: 21px;
   height: 21px;

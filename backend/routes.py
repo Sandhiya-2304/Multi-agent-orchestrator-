@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse, FileResponse
 
 from backend.db import (
@@ -17,6 +17,7 @@ from backend.db import (
     list_conversations,
     load_messages,
     delete_conversation,
+    get_conversation_owner,
 )
 from backend.schemas import ChatRequest, LoginRequest
 from backend.orchestrator.orchestrator import SDLCOrchestrator
@@ -36,6 +37,20 @@ from backend.rag.knowledge_base import RAGModelUnavailableError, RAGService
 from agent_framework import Agent
 
 router = APIRouter()
+
+# Every chat belongs to the signed-in account that created it, identified by
+# this header (the frontend sends the MSAL account's homeAccountId). There is
+# no server-side verification of the Microsoft-issued token yet, so this only
+# stops different users from *accidentally* sharing chats through the UI --
+# it is not a substitute for real bearer-token validation against Azure AD.
+def require_user_id(x_user_id: str | None = Header(default=None, alias="X-User-Id")) -> str:
+    return x_user_id or "anonymous"
+
+
+def ensure_conversation_access(conversation_id: int, user_id: str) -> None:
+    owner = get_conversation_owner(conversation_id)
+    if owner is not None and owner != user_id:
+        raise HTTPException(status_code=404, detail="Chat workspace not found")
 
 # Questions asking for every matching record ("list all IT students in the
 # hostel") need broad recall across the whole source table, not just the
@@ -205,8 +220,8 @@ def login(req: LoginRequest):
 
 
 @router.get("/chats")
-def get_chats():
-    rows = list_conversations()
+def get_chats(user_id: str = Depends(require_user_id)):
+    rows = list_conversations(user_id=user_id)
     return [
         {"id": row["id"], "title": row["title"], "created_at": row["created_at"], "updated_at": row["updated_at"]}
         for row in rows
@@ -214,13 +229,13 @@ def get_chats():
 
 
 @router.post("/chats/new")
-def new_chat():
-    chat_id = create_conversation("New Chat")
+def new_chat(user_id: str = Depends(require_user_id)):
+    chat_id = create_conversation("New Chat", user_id=user_id)
     return {"chat_id": chat_id, "title": "New Chat"}
 
 
 @router.get("/chat/{conversation_id}")
-def get_chat(conversation_id: str):
+def get_chat(conversation_id: str, user_id: str = Depends(require_user_id)):
     if conversation_id == "new":
         return {"id": "new", "messages": []}
 
@@ -228,6 +243,8 @@ def get_chat(conversation_id: str):
         conv_id_int = int(conversation_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid workspace identifier")
+
+    ensure_conversation_access(conv_id_int, user_id)
 
     rows = load_messages(conv_id_int)
     formatted_messages = []
@@ -251,7 +268,8 @@ def get_chat(conversation_id: str):
 
 
 @router.delete("/chats/{conversation_id}")
-def remove_chat(conversation_id: int):
+def remove_chat(conversation_id: int, user_id: str = Depends(require_user_id)):
+    ensure_conversation_access(conversation_id, user_id)
     delete_conversation(conversation_id)
     return {"ok": True, "chat_id": conversation_id}
 
@@ -261,7 +279,7 @@ def remove_chat(conversation_id: int):
 # ---------------------------------------------------------------------------
 
 @router.post("/chat/{conversation_id}")
-async def chat(conversation_id: str, req: ChatRequest):
+async def chat(conversation_id: str, req: ChatRequest, user_id: str = Depends(require_user_id)):
     """
     Main entry point for user messages.
     Delegates to SDLCOrchestrator and awaits result.
@@ -277,6 +295,8 @@ async def chat(conversation_id: str, req: ChatRequest):
         conv_id_int = int(conversation_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Chat Identifier")
+
+    ensure_conversation_access(conv_id_int, user_id)
 
     try:
         # Load previous messages to build conversation history for memory

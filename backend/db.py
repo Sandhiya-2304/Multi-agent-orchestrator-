@@ -26,9 +26,18 @@ def get_db_connection():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                user_id TEXT
             )
         """)
+        # Defensive migration for databases created before user_id existed --
+        # each chat needs to be scoped to the account that created it so one
+        # signed-in user never sees another user's conversations.
+        try:
+            conn.execute("ALTER TABLE conversations ADD COLUMN user_id TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
         conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,17 +100,26 @@ def init_db():
 
 
 
-def create_conversation(title="New Chat"):
+def create_conversation(title="New Chat", user_id=None):
     now = datetime.now().isoformat()
     conn = get_db_connection()
     cur = conn.execute(
-        "INSERT INTO conversations (title, created_at, updated_at) VALUES (?, ?, ?)",
-        (title, now, now),
+        "INSERT INTO conversations (title, created_at, updated_at, user_id) VALUES (?, ?, ?, ?)",
+        (title, now, now, user_id),
     )
     conn.commit()
     conversation_id = cur.lastrowid
     conn.close()
     return conversation_id
+
+
+def get_conversation_owner(conversation_id):
+    conn = get_db_connection()
+    row = conn.execute(
+        "SELECT user_id FROM conversations WHERE id = ?", (conversation_id,)
+    ).fetchone()
+    conn.close()
+    return row["user_id"] if row else None
 
 
 def update_conversation_title(conversation_id, title):
@@ -139,11 +157,17 @@ def save_message(conversation_id, role, msg_type, content, attachment_filenames=
         conn.close()
 
 
-def list_conversations():
+def list_conversations(user_id=None):
     conn = get_db_connection()
-    rows = conn.execute(
-        "SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
-    ).fetchall()
+    if user_id is None:
+        rows = conn.execute(
+            "SELECT id, title, created_at, updated_at FROM conversations ORDER BY updated_at DESC"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, title, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC",
+            (user_id,),
+        ).fetchall()
     conn.close()
     return rows
 
