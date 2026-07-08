@@ -15,6 +15,8 @@
   --accent-hover: #c2e7ff;
   --border-color: #3c4043;
   --online-green: #34a853;
+  --bg-hover: #333537;
+  --bg-card: #232426;
   --font-family: 'Inter', sans-serif;
   --sidebar-width: 280px;
   /* Chat column caps out well short of the viewport on ultra-wide monitors
@@ -175,20 +177,72 @@ body {
   text-overflow: ellipsis;
 }
 
-.chat-item button {
-  background: none;
-  border: none;
-  color: #ff6b6b;
-  font-size: 0.75rem;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  opacity: 0.8;
-  transition: opacity 0.2s, background-color 0.2s;
+.chat-item-actions {
+  position: relative;
+  flex-shrink: 0;
 }
 
-.chat-item button:hover {
+.chat-item-more {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.chat-item:hover .chat-item-more,
+.chat-item.active .chat-item-more,
+.chat-item-more.is-open {
   opacity: 1;
+}
+
+.chat-item-more:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.chat-item-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+}
+
+.chat-item-menu.hidden {
+  display: none;
+}
+
+.chat-item-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.chat-item-menu-item:hover {
   background-color: rgba(255, 107, 107, 0.15);
 }
 
@@ -1090,5 +1144,328 @@ body {
 
   .modal-panel {
     width: 94%;
+  }
+}
+
+/* Microsoft Login Styles */
+.login-page {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  background-color: #f5f5f7;
+  font-family: 'Segoe UI', var(--font-family);
+}
+
+.login-left {
+  flex: 1.05;
+  position: relative;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.14) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    linear-gradient(135deg, #0f3d7a 0%, #06203f 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  padding: 56px;
+  overflow: hidden;
+}
+
+.login-left-content {
+  max-width: 440px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-left-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 40px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.3px;
+}
+
+.login-left-badge-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.login-left-content h1 {
+  font-size: 2.15rem;
+  font-weight: 700;
+  margin-bottom: 18px;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+}
+
+.login-left-lead {
+  font-size: 1.02rem;
+  opacity: 0.82;
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+
+.login-feature-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.login-feature-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.login-feature-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+}
+
+.login-feature-list strong {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.login-feature-list p {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.login-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f7;
+  position: relative;
+  padding: 40px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 48px 44px;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e7e6e4;
+  box-shadow: 0 24px 60px -20px rgba(15, 61, 122, 0.18);
+}
+
+.login-brand {
+  margin-bottom: 28px;
+}
+
+.ms-logo {
+  height: 22px;
+  width: max-content;
+}
+
+.login-title {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #1b1b1b;
+  margin-bottom: 8px;
+  font-family: 'Segoe UI', 'Inter', sans-serif;
+}
+
+.login-subtitle {
+  font-size: 0.92rem;
+  color: #605e5c;
+  line-height: 1.5;
+  margin-bottom: 32px;
+}
+
+.ms-login-btn {
+  background-color: #2f2f2f;
+  color: white;
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  transition: background-color 0.2s, box-shadow 0.2s, transform 0.1s;
+  font-family: 'Segoe UI', 'Inter', sans-serif;
+}
+
+.ms-login-btn:hover {
+  background-color: #000000;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.ms-login-btn:active {
+  transform: translateY(1px);
+}
+
+.ms-login-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ms-btn-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.login-footer-note {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid #eeedeb;
+  font-size: 0.78rem;
+  color: #8a8886;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.login-footer-note i {
+  color: #a3a19f;
+}
+
+/* Sidebar Profile Styles */
+.sidebar-bottom {
+  margin-top: auto;
+  border-top: 1px solid var(--border-color);
+  padding: 12px;
+  position: relative;
+}
+
+.sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  color: var(--text-main);
+}
+
+.sidebar-profile:hover {
+  background-color: var(--bg-hover);
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-more {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Profile Popover Menu */
+.profile-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 12px;
+  right: 12px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+.profile-menu.hidden {
+  display: none;
+}
+
+.profile-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s;
+}
+
+.profile-menu-item:hover {
+  background-color: var(--bg-hover);
+}
+
+@media (max-width: 768px) {
+  .login-page {
+    flex-direction: column;
+  }
+  .login-left {
+    display: none;
+  }
+  .login-card {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    border-radius: 14px;
+    padding: 36px 28px;
+  }
+  .login-right {
+    background-color: #f5f5f7;
+    padding: 24px;
   }
 }

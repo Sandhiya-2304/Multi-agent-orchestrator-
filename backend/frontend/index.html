@@ -9,9 +9,69 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" />
+  <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
 </head>
 <body>
-  <div class="app">
+  <div id="loginPage" class="login-page" style="display: none;">
+    <div class="login-left">
+      <div class="login-left-content">
+        <div class="login-left-badge">
+          <div class="login-left-badge-logo">AI</div>
+          <span>AI Assistant</span>
+        </div>
+
+        <h1>One workspace for every way your team works with AI.</h1>
+        <p class="login-left-lead">
+          Conversational chat, knowledge-grounded answers, and orchestrated multi-agent
+          automation &mdash; unified in a single, secure platform.
+        </p>
+
+        <ul class="login-feature-list">
+          <li>
+            <span class="login-feature-icon"><i class="fa-solid fa-comments"></i></span>
+            <div>
+              <strong>Conversational Chat</strong>
+              <p>Natural-language answers for quick, everyday questions.</p>
+            </div>
+          </li>
+          <li>
+            <span class="login-feature-icon"><i class="fa-solid fa-database"></i></span>
+            <div>
+              <strong>Retrieval-Augmented Generation</strong>
+              <p>Responses grounded in your own documents and knowledge base.</p>
+            </div>
+          </li>
+          <li>
+            <span class="login-feature-icon"><i class="fa-solid fa-diagram-project"></i></span>
+            <div>
+              <strong>Multi-Agent Orchestration</strong>
+              <p>Specialised agents coordinate full SDLC workflows end to end.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="login-right">
+      <div class="login-card">
+        <div class="login-brand">
+          <img src="https://logincdn.msauth.net/shared/1.0/content/images/microsoft_logo_ee5c8d9fb6248c938fd0dc19370e90bd.svg" alt="Microsoft" class="ms-logo">
+        </div>
+        <h2 class="login-title">Welcome back</h2>
+        <p class="login-subtitle">Sign in with your organisation account to continue to AI Assistant</p>
+
+        <button id="msLoginBtn" class="ms-login-btn">
+          <img src="https://learn.microsoft.com/en-us/azure/active-directory/develop/media/howto-add-branding-in-azure-ad-apps/ms-symbollockup_mssymbol_19.png" alt="MS Icon" class="ms-btn-icon">
+          <span>Sign in with Microsoft</span>
+        </button>
+
+        <p class="login-footer-note">
+          <i class="fa-solid fa-shield-halved"></i> Secure sign-in powered by Microsoft Entra ID
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="app" id="chatApp" style="display: none;">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-top">
         <div class="brand">
@@ -32,6 +92,21 @@
         <span class="section-title">Chats</span>
         <div id="chatList" class="chat-list"></div>
       </div>
+      
+      <div class="sidebar-bottom">
+        <div class="sidebar-profile" id="sidebarProfile" tabindex="0">
+          <div class="profile-avatar" id="profileAvatar">U</div>
+          <div class="profile-info">
+            <span class="profile-name" id="userNameDisplay">Loading...</span>
+          </div>
+          <i class="fa-solid fa-ellipsis profile-more"></i>
+        </div>
+        <div class="profile-menu hidden" id="profileMenu">
+          <button id="logoutBtn" class="profile-menu-item">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign out
+          </button>
+        </div>
+      </div>
     </aside>
 
     <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
@@ -45,7 +120,6 @@
           <div class="online-dot"></div>
           <span>AI Assistant</span>
         </div>
-
       </header>
 
       <section id="chatMessages" class="messages"></section>

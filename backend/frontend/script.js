@@ -8,6 +8,15 @@ const sidebar = document.getElementById("sidebar");
 const sidebarToggle = document.getElementById("sidebarToggle");
 const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
+let msalInstance = null;
+const loginPage = document.getElementById("loginPage");
+const chatApp = document.getElementById("chatApp");
+const msLoginBtn = document.getElementById("msLoginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const sidebarProfile = document.getElementById("sidebarProfile");
+const profileMenu = document.getElementById("profileMenu");
+const profileAvatar = document.getElementById("profileAvatar");
+
 
 
 const attachWrapper = document.getElementById("attachWrapper");
@@ -50,6 +59,15 @@ function markdownToHtml(md) {
   html = html.replace(/`([^`]+)`/gim, "<code>$1</code>");
   html = html.replace(/\n/g, "<br>");
   return html;
+}
+
+function getInitials(name) {
+  if (!name) return "U";
+  const parts = name.trim().split(" ");
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0][0].toUpperCase();
 }
 
 function setUrlToNewChat() {
@@ -231,6 +249,11 @@ function renderMessages() {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+function closeAllChatItemMenus() {
+  document.querySelectorAll(".chat-item-menu").forEach((m) => m.classList.add("hidden"));
+  document.querySelectorAll(".chat-item-more").forEach((b) => b.classList.remove("is-open"));
+}
+
 function renderChatList() {
   chatList.innerHTML = "";
 
@@ -245,11 +268,25 @@ function renderChatList() {
       closeSidebar();
     };
 
+    const actions = document.createElement("div");
+    actions.className = "chat-item-actions";
+
+    const moreBtn = document.createElement("button");
+    moreBtn.type = "button";
+    moreBtn.className = "chat-item-more";
+    moreBtn.setAttribute("aria-label", "Chat options");
+    moreBtn.innerHTML = `<i class="fa-solid fa-ellipsis"></i>`;
+
+    const menu = document.createElement("div");
+    menu.className = "chat-item-menu hidden";
+
     const del = document.createElement("button");
     del.type = "button";
-    del.textContent = "Delete";
+    del.className = "chat-item-menu-item";
+    del.innerHTML = `<i class="fa-solid fa-trash"></i> Delete`;
     del.onclick = async (e) => {
       e.stopPropagation();
+      closeAllChatItemMenus();
       await fetch(`/api/chats/${chat.id}`, { method: "DELETE" });
       chats = chats.filter((c) => String(c.id) !== String(chat.id));
 
@@ -262,12 +299,30 @@ function renderChatList() {
 
       renderChatList();
     };
+    menu.appendChild(del);
+
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      const isHidden = menu.classList.contains("hidden");
+      closeAllChatItemMenus();
+      if (isHidden) {
+        menu.classList.remove("hidden");
+        moreBtn.classList.add("is-open");
+      }
+    };
+
+    actions.appendChild(moreBtn);
+    actions.appendChild(menu);
 
     item.appendChild(title);
-    item.appendChild(del);
+    item.appendChild(actions);
     chatList.appendChild(item);
   });
 }
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".chat-item-actions")) closeAllChatItemMenus();
+});
 
 async function loadChats() {
   const res = await fetch("/api/chats");
@@ -750,7 +805,112 @@ sidebarToggle.addEventListener("click", () => {
 
 sidebarBackdrop.addEventListener("click", closeSidebar);
 
-window.onload = async () => {
+function wireSidebarProfileMenu() {
+  if (!sidebarProfile || !profileMenu) return;
+  sidebarProfile.onclick = (e) => {
+    e.stopPropagation();
+    profileMenu.classList.toggle("hidden");
+  };
+  document.addEventListener("click", (e) => {
+    if (!sidebarProfile.contains(e.target) && !profileMenu.contains(e.target)) {
+      profileMenu.classList.add("hidden");
+    }
+  });
+}
+
+async function initAuth() {
+  wireSidebarProfileMenu();
+
+  try {
+    const res = await fetch("/api/auth-config");
+    const config = await res.json();
+
+    if (!config.clientId) {
+      console.warn("No VITE_CLIENT_ID found. Running in local dev auth mode.");
+      const userNameDisplay = document.getElementById("userNameDisplay");
+      if (userNameDisplay) userNameDisplay.textContent = "Local User";
+      if (profileAvatar) profileAvatar.textContent = "U";
+
+      if (msLoginBtn) {
+        msLoginBtn.onclick = () => showChatApp();
+      }
+      if (logoutBtn) {
+        logoutBtn.onclick = () => {
+          profileMenu.classList.add("hidden");
+          showLoginPage();
+        };
+      }
+
+      showLoginPage();
+      return;
+    }
+
+    const msalConfig = {
+      auth: {
+        clientId: config.clientId,
+        authority: `https://login.microsoftonline.com/${config.tenantId}`,
+        redirectUri: window.location.origin
+      },
+      cache: {
+        cacheLocation: "sessionStorage",
+        storeAuthStateInCookie: false,
+      }
+    };
+    
+    msalInstance = new msal.PublicClientApplication(msalConfig);
+
+    // Wire the login/logout buttons up front so they work regardless of
+    // which branch below returns early (e.g. right after a login redirect).
+    msLoginBtn.onclick = () => {
+      // Use redirect instead of popup for a full-page experience
+      msalInstance.loginRedirect({ scopes: ["user.read"] });
+    };
+
+    if (logoutBtn) {
+      logoutBtn.onclick = () => {
+        if (profileMenu) profileMenu.classList.add("hidden");
+        const account = msalInstance.getAllAccounts()[0];
+        msalInstance.logoutRedirect({
+          account,
+          postLogoutRedirectUri: window.location.origin
+        });
+      };
+    }
+
+    // Handle redirect response
+    const response = await msalInstance.handleRedirectPromise();
+    if (response) {
+      // Successful login from redirect
+      const userNameDisplay = document.getElementById("userNameDisplay");
+      const displayStr = response.account.username || response.account.name;
+      if (userNameDisplay) userNameDisplay.textContent = displayStr;
+      if (profileAvatar) profileAvatar.textContent = getInitials(response.account.name || displayStr);
+
+      showChatApp();
+      return;
+    }
+
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+      const userNameDisplay = document.getElementById("userNameDisplay");
+      const displayStr = accounts[0].username || accounts[0].name;
+      if (userNameDisplay) userNameDisplay.textContent = displayStr;
+      if (profileAvatar) profileAvatar.textContent = getInitials(accounts[0].name || displayStr);
+
+      showChatApp();
+    } else {
+      showLoginPage();
+    }
+  } catch (err) {
+    console.error("Failed to load auth config or login", err);
+    showChatApp(); // Fallback if API fails
+  }
+}
+
+async function showChatApp() {
+  if (loginPage) loginPage.style.display = "none";
+  if (chatApp) chatApp.style.display = "flex";
+  
   await loadChats();
 
   const chatId = window.location.pathname.split("/")[2];
@@ -763,6 +923,18 @@ window.onload = async () => {
     renderMessages();
     renderChatList();
   }
+}
+
+function showLoginPage() {
+  if (loginPage) loginPage.style.display = "flex";
+  if (chatApp) chatApp.style.display = "none";
+  if (window.location.pathname !== "/login") {
+    history.replaceState({ page: "login" }, "", "/login");
+  }
+}
+
+window.onload = async () => {
+  await initAuth();
 };
 
 window.addEventListener("popstate", async () => {

@@ -1,6 +1,6 @@
 import asyncio
 
-from orchestrator import SDLCOrchestrator
+from backend.orchestrator import SDLCOrchestrator
 
 
 async def main():
@@ -8,18 +8,16 @@ async def main():
     print("=" * 60)
     print("AI Multi-Agent SDLC Framework")
     print("=" * 60)
-    task_name = input("Enter Task Name : ")
-
 
     task = input("Enter Software Requirement : ")
 
     orchestrator = SDLCOrchestrator()
 
+    result = await orchestrator.execute_sdlc(user_request=task)
 
-    await orchestrator.execute(
-        task_name=task_name,
-        user_request=task,
-    )
+    print("\n" + "=" * 60)
+    print("DONE - output written under:", orchestrator.output_root)
+    print("=" * 60)
 
 
 if __name__ == "__main__":  #directly run the script

@@ -42,7 +42,21 @@ def startup():
         startup_error = traceback.format_exc()
         print(f"Startup error: {startup_error}")
 
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+
+@app.get("/api/auth-config")
+async def get_auth_config():
+    return {
+        "clientId": os.getenv("VITE_CLIENT_ID"),
+        "tenantId": os.getenv("VITE_TENANT_ID", "common")
+    }
+
+@app.get("/login")
+async def login_page():
+    return FileResponse(str(FRONTEND_DIR / "index.html"))
 
 @app.get("/chat/{conversation_id}")
 async def chat_page(conversation_id: str):
