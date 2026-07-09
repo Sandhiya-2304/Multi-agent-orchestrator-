@@ -1070,82 +1070,6 @@ body {
   }
 }
 
-@media (max-width: 640px) {
-  .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 60;
-    transform: translateX(-100%);
-    box-shadow: 0 0 32px rgba(0, 0, 0, 0.5);
-  }
-
-  .sidebar.is-open {
-    transform: translateX(0);
-  }
-
-  .sidebar-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: 55;
-  }
-
-  .sidebar-backdrop.hidden {
-    display: none;
-  }
-
-  .sidebar-toggle {
-    display: flex;
-  }
-
-  .top-left span {
-    display: none;
-  }
-
-  .kb-btn span {
-    display: none;
-  }
-
-  .kb-btn {
-    padding: 8px 10px;
-  }
-
-  .topbar {
-    padding: 0 12px;
-  }
-
-  :root {
-    --content-max-width: 100%;
-  }
-
-  .messages {
-    padding: 16px 12px;
-    gap: 14px;
-  }
-
-  .message-content {
-    max-width: 92%;
-  }
-
-  .download-area {
-    padding: 0 12px 10px 12px;
-  }
-
-  .composer-area {
-    padding: 10px 10px 16px 10px;
-  }
-
-  .attachment-card {
-    width: 100%;
-    min-width: 0;
-    flex: 1 1 calc(50% - 6px);
-  }
-
-  .modal-panel {
-    width: 94%;
-  }
-}
 
 /* Microsoft Login Styles */
 .login-page {
@@ -1459,6 +1383,10 @@ body {
 }
 
 @media (max-width: 768px) {
+  :root {
+    --content-max-width: 100%;
+  }
+
   .login-page {
     flex-direction: column;
   }
@@ -1475,32 +1403,47 @@ body {
     padding: 24px;
   }
 
-  /* Chat App Responsive Styles */
+  /* Chat App Responsive Styles: sidebar becomes a slide-in overlay */
   .sidebar {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: -100%;
+    position: fixed;
+    inset: 0 auto 0 0;
     z-index: 100;
     width: 80%;
     max-width: 320px;
-    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   }
 
   .sidebar.is-open {
-    left: 0;
+    transform: translateX(0);
   }
 
-  .sidebar-backdrop:not(.hidden) {
+  .sidebar-backdrop {
     display: block;
-    position: absolute;
+    position: fixed;
     inset: 0;
     background-color: rgba(0, 0, 0, 0.6);
     z-index: 90;
   }
 
+  .sidebar-backdrop.hidden {
+    display: none;
+  }
+
   .sidebar-toggle {
     display: flex; /* Unhide hamburger */
+  }
+
+  .top-left span {
+    display: none;
+  }
+
+  .kb-btn span {
+    display: none;
+  }
+
+  .kb-btn {
+    padding: 8px 10px;
   }
 
   .topbar {
@@ -1509,13 +1452,75 @@ body {
 
   .messages {
     padding: 16px;
+    gap: 14px;
+  }
+
+  .message-content {
+    max-width: 90%;
+  }
+
+  .download-area {
+    padding: 0 16px 10px 16px;
   }
 
   .composer-area {
     padding: 12px 16px 20px 16px;
   }
 
+  .attachment-card {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .modal-panel {
+    width: 94%;
+  }
+}
+
+/* Extra-small phones: tighter spacing on top of the 768px tier above */
+@media (max-width: 480px) {
+  .sidebar {
+    width: 86%;
+    max-width: none;
+  }
+
+  .topbar {
+    padding: 0 12px;
+  }
+
+  .messages {
+    padding: 12px;
+    gap: 12px;
+  }
+
   .message-content {
-    max-width: 90%;
+    max-width: 94%;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+  }
+
+  .download-area {
+    padding: 0 12px 8px 12px;
+  }
+
+  .composer-area {
+    padding: 10px 10px 16px 10px;
+  }
+
+  .attachment-card {
+    flex: 1 1 100%;
+  }
+
+  .login-card {
+    padding: 28px 20px;
+  }
+
+  .login-title {
+    font-size: 1.35rem;
+  }
+
+  .modal-panel {
+    width: 96%;
   }
 }
