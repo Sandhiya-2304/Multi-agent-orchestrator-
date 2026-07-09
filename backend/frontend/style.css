@@ -1,3 +1,4 @@
+
 * {
   margin: 0;
   padding: 0;
@@ -23,6 +24,13 @@
      (readable line length) but uses nearly all of it on laptop/tablet sizes
      instead of sitting in a narrow strip with huge empty gutters. */
   --content-max-width: min(1240px, 94%);
+  /* Mobile browsers report 100vh as the *largest* possible viewport (address
+     bar collapsed), so a fixed 100vh layout with overflow:hidden leaves the
+     composer sitting below the actually-visible area, unreachable, whenever
+     the address bar or on-screen keyboard is showing. script.js keeps this
+     in sync with window.visualViewport so the layout always matches what's
+     really visible; 100dvh is the fallback until that JS runs. */
+  --app-height: 100dvh;
 }
 
 html, body {
@@ -39,7 +47,7 @@ body {
 .app {
   display: flex;
   width: 100vw;
-  height: 100vh;
+  height: var(--app-height);
   overflow: hidden;
 }
 
@@ -1074,7 +1082,7 @@ body {
 /* Microsoft Login Styles */
 .login-page {
   display: flex;
-  height: 100vh;
+  height: var(--app-height);
   width: 100vw;
   position: absolute;
   top: 0;

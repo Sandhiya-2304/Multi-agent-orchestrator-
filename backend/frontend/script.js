@@ -1,3 +1,19 @@
+// Mobile browsers collapse/expand the address bar and, on keyboard focus,
+// shrink the visual viewport without resizing the layout viewport — so a
+// plain 100vh layout leaves the composer pinned below the visible area.
+// Track the real visible height and feed it back as a CSS var.
+function syncAppHeight() {
+  const height = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  document.documentElement.style.setProperty("--app-height", `${height}px`);
+}
+syncAppHeight();
+window.addEventListener("resize", syncAppHeight);
+window.addEventListener("orientationchange", syncAppHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncAppHeight);
+  window.visualViewport.addEventListener("scroll", syncAppHeight);
+}
+
 const chatList = document.getElementById("chatList");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("chatForm");
