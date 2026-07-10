@@ -301,6 +301,7 @@ async def chat(conversation_id: str, req: ChatRequest, user_id: str = Depends(re
     try:
         # Load previous messages to build conversation history for memory
         rows = load_messages(conv_id_int)
+        is_first_message = len(rows) == 0
         history_text = ""
         if rows:
             history_text = "Previous conversation context:\n"
@@ -396,8 +397,9 @@ async def chat(conversation_id: str, req: ChatRequest, user_id: str = Depends(re
             # Chat mode
             reply = await orchestrator.handle_chat(message, history_text, context_text)
             save_message(conv_id_int, "assistant", "text", reply)
-            title = await generate_smart_chat_title(message, reply)
-            update_conversation_title(conv_id_int, title)
+            if is_first_message:
+                title = await generate_smart_chat_title(message, reply)
+                update_conversation_title(conv_id_int, title)
             return {
                 "chat_id": conv_id_int,
                 "mode": "chat",
@@ -412,8 +414,9 @@ async def chat(conversation_id: str, req: ChatRequest, user_id: str = Depends(re
 
         # Save and return
         save_message(conv_id_int, "assistant", "sdlc", json.dumps(payload))
-        title = await generate_smart_chat_title(message, payload.get("reply", ""))
-        update_conversation_title(conv_id_int, title)
+        if is_first_message:
+            title = await generate_smart_chat_title(message, payload.get("reply", ""))
+            update_conversation_title(conv_id_int, title)
 
         return payload
     except HTTPException:

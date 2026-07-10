@@ -71,13 +71,36 @@ function escapeHtml(str) {
 }
 
 function markdownToHtml(md) {
-  let html = escapeHtml(md || "");
+  if (!md) return "";
+  
+  const codeBlocks = [];
+  let processedMd = md.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    codeBlocks.push({ lang, code });
+    return `___CODE_BLOCK_${codeBlocks.length - 1}___`;
+  });
+
+  let html = escapeHtml(processedMd);
+  
   html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
   html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
   html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
   html = html.replace(/\*\*(.*?)\*\*/gim, "<strong>$1</strong>");
-  html = html.replace(/`([^`]+)`/gim, "<code>$1</code>");
+  html = html.replace(/`([^`\n]+)`/gim, "<code>$1</code>");
   html = html.replace(/\n/g, "<br>");
+
+  codeBlocks.forEach((block, index) => {
+    const escapedCode = escapeHtml(block.code);
+    const blockHtml = `
+      <div class="code-block-wrapper">
+        <div class="code-block-header">
+          <span class="code-lang">${block.lang || ""}</span>
+          <button type="button" class="copy-btn"><i class="fa-regular fa-copy"></i> Copy</button>
+        </div>
+        <pre class="code-block"><code>${escapedCode}</code></pre>
+      </div>`;
+    html = html.replace(`___CODE_BLOCK_${index}___`, blockHtml);
+  });
+
   return html;
 }
 
@@ -104,12 +127,27 @@ function setUrlToChatId(chatId) {
 }
 
 function renderCodeBlock(code) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "code-block-wrapper";
+  
+  const header = document.createElement("div");
+  header.className = "code-block-header";
+  
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "copy-btn";
+  copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy';
+  header.appendChild(copyBtn);
+  wrapper.appendChild(header);
+
   const pre = document.createElement("pre");
   pre.className = "code-block";
   const codeEl = document.createElement("code");
   codeEl.textContent = code || "";
   pre.appendChild(codeEl);
-  return pre;
+  wrapper.appendChild(pre);
+
+  return wrapper;
 }
 
 function buildSection(title, content, isCode, projectFolder, fileName) {
@@ -176,7 +214,7 @@ function buildSdlcCard(data) {
     if (block) container.appendChild(block);
   });
 
-  if (data?.project_folder && data?.has_zip) {
+  if (data?.project_folder && data?.has_zip && Object.keys(files).length > 1) {
     const globalZipBtn = document.createElement("button");
     globalZipBtn.type = "button";
     globalZipBtn.className = "download-btn";
@@ -346,6 +384,22 @@ function renderChatList() {
 
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".chat-item-actions")) closeAllChatItemMenus();
+  
+  const copyBtn = e.target.closest(".copy-btn");
+  if (copyBtn) {
+    const wrapper = copyBtn.closest(".code-block-wrapper");
+    if (wrapper) {
+      const codeEl = wrapper.querySelector("code");
+      if (codeEl) {
+        navigator.clipboard.writeText(codeEl.textContent);
+        const originalHtml = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+        setTimeout(() => {
+          if (copyBtn.isConnected) copyBtn.innerHTML = originalHtml;
+        }, 2000);
+      }
+    }
+  }
 });
 
 async function loadChats() {
@@ -690,6 +744,7 @@ chatForm.addEventListener("submit", async (e) => {
   if ((!text && !pendingAttachments.length) || isLoading) return;
 
   isLoading = true;
+  sendBtn.disabled = true;
 
   if (!currentChatId || currentChatId === "new") {
     try {
@@ -739,6 +794,7 @@ chatForm.addEventListener("submit", async (e) => {
 
   turns.push(turn);
   messageInput.value = "";
+  messageInput.style.height = "auto";
   pendingAttachments.forEach((att) => {
     if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
   });
@@ -782,6 +838,10 @@ chatForm.addEventListener("submit", async (e) => {
     const lastTurn = turns[turns.length - 1];
     if (lastTurn) lastTurn.loading = false;
     isLoading = false;
+    sendBtn.disabled = false;
+    
+    // Focus the input again after generating
+    messageInput.focus();
     
     renderChatList();
     renderMessages();
@@ -798,6 +858,11 @@ messageInput.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (!isLoading) chatForm.requestSubmit();
   }
+});
+
+messageInput.addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = this.scrollHeight + "px";
 });
 
 newChatBtn.onclick = async () => {
@@ -820,10 +885,17 @@ function closeSidebar() {
 }
 
 sidebarToggle.addEventListener("click", () => {
-  if (sidebar.classList.contains("is-open")) {
-    closeSidebar();
+  if (window.innerWidth > 768) {
+    sidebar.classList.toggle("is-collapsed");
+    sidebarToggle.title = sidebar.classList.contains("is-collapsed") ? "Open Sidebar" : "Close Sidebar";
   } else {
-    openSidebar();
+    if (sidebar.classList.contains("is-open")) {
+      closeSidebar();
+      sidebarToggle.title = "Open Sidebar";
+    } else {
+      openSidebar();
+      sidebarToggle.title = "Close Sidebar";
+    }
   }
 });
 
